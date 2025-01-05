@@ -1,0 +1,69 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+import streamlit as st
+
+# Load datasets
+events = pd.read_csv('events.csv')
+ginf = pd.read_csv('ginf.csv')
+
+# Preprocessing: Select relevant features and map categorical codes using dictionary.txt mappings
+dictionary = {
+    "event_type": {
+        0: "Announcement", 1: "Attempt", 2: "Corner", 3: "Foul", 4: "Yellow card",
+        5: "Second yellow card", 6: "Red card", 7: "Substitution", 8: "Free kick won",
+        9: "Offside", 10: "Hand ball", 11: "Penalty conceded"
+    },
+    "situation": {
+        1: "Open play", 2: "Set piece", 3: "Corner", 4: "Free kick"
+    }
+}
+
+# Map categorical data
+events['event_type'] = events['event_type'].map(dictionary['event_type'])
+events['situation'] = events['situation'].map(dictionary['situation'])
+
+# Define target (Y) and predictor (X)
+X = events[['minute', 'event_type', 'situation']].copy()  # Use relevant features
+X['event_type'] = X['event_type'].astype('category').cat.codes
+X['situation'] = X['situation'].astype('category').cat.codes
+Y = events['event_type'].apply(lambda x: 1 if x in [4, 5, 6] else 0)  # Target: Referee critical decisions
+
+# Split data into train and test sets
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.2, random_state=42)
+
+# Train the model
+model = LogisticRegression()
+model.fit(X_train, Y_train)
+
+# Evaluate the model
+predictions = model.predict(X_test)
+accuracy = accuracy_score(Y_test, predictions)
+
+# Streamlit App
+def main():
+    st.title("AI Referee Decision Support System")
+
+    st.write("### Model Information")
+    st.write(f"Accuracy: {accuracy:.2f}")
+
+    # User input
+    minute = st.slider("Select Match Minute", min_value=0, max_value=90, value=45)
+    event_type = st.selectbox("Event Type", options=dictionary['event_type'].values())
+    situation = st.selectbox("Situation", options=dictionary['situation'].values())
+
+    # Prepare input for prediction
+    event_type_code = {v: k for k, v in dictionary['event_type'].items()}[event_type]
+    situation_code = {v: k for k, v in dictionary['situation'].items()}[situation]
+    input_data = np.array([[minute, event_type_code, situation_code]])
+
+    pred = model.predict(input_data)[0]
+
+    st.write("### Prediction")
+    decision = "Critical Decision Required" if pred == 1 else "No Critical Decision"
+    st.write(f"AI Referee Decision: {decision}")
+
+if __name__ == "__main__":
+    main()
